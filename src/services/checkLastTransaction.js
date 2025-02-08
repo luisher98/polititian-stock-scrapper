@@ -54,7 +54,7 @@ export default async function checkAndUpdateLatestTransactionData(
       message: "New transaction data found!",
       time: new Date().toISOString(),
       pdfUrl: newPDFUrl,
-      transaction: detailedTransactionData,
+      transaction: detailedTransactionData
     });
 
     // update the old data

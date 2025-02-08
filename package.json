@@ -15,7 +15,7 @@
   "main": "main.js",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
+    "dev": "node src/index.js",
     "db": "node ./src/db/db.js",
     "transactions": "node ./src/transactions/transaction.js"
   },

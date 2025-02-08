@@ -2,6 +2,8 @@ import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import checkAndUpdateLatestTransactionData from "./services/checkLastTransaction.js";
+import transactionDataSSE from "./routes/SSE/transactionDataSSE.js";
+import transactionDataREST from "./routes/REST/transactionDataREST.js";
 
 dotenv.config();
 
@@ -36,35 +38,10 @@ const transactionUpdate = (event) => {
 })();
 
 // SSE endpoint
-app.get("/polititians-transaction-data-sse", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  try {
-    clients.push(res);
-
-    res.on("close", () => {
-      clients = clients.filter((client) => client !== res);
-    });
-  } catch (error) {
-    console.log(error);
-  }
-});
+app.get("/polititians-transaction-data-sse", transactionDataSSE);
 
 // REST endpoint
-app.get("/latest-polititian-transaction-data", async (req, res) => {
-  try {
-    const transactionUpdate = (e) => {
-      res.json(e);
-    };
-
-    await checkAndUpdateLatestTransactionData(transactionUpdate);
-  } catch (error) {
-    console.log(error);
-  }
-});
+app.get("/latest-polititian-transaction-data", transactionDataREST);
 
 app.listen(PORT, () => {
   console.log(
