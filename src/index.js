@@ -1,50 +1,89 @@
+/**
+ * @fileoverview Main application entry point.
+ * Sets up Express server, routes, and transaction monitoring.
+ * @module index
+ */
+
 import express from "express";
-import bodyParser from "body-parser";
-import dotenv from "dotenv";
+import cors from "cors";
+import chalk from "chalk";
+import { CONFIG } from "./utils/config.js";
+import transactionDataSSE from "./routes/transactionDataSSE.js";
+import transactionDataREST from "./routes/transactionDataREST.js";
+import { sendSSEUpdate } from "./routes/transactionDataSSE.js";
 import checkAndUpdateLatestTransactionData from "./services/checkLastTransaction.js";
-import transactionDataSSE from "./routes/SSE/transactionDataSSE.js";
-import transactionDataREST from "./routes/REST/transactionDataREST.js";
-
-dotenv.config();
-
-const PORT = process.env.PORT || 5000;
-const SERVER_NAME = process.env.SERVER_NAME || "http://localhost";
-const SCRAPPER_FREQUENCY = process.env.SCRAPPER_FREQUENCY_MINUTES || 60; // in minutes
 
 const app = express();
-app.use(bodyParser.json());
 
-let clients = [];
+// Middleware setup
+app.use(cors());
+app.use(express.json());
 
-const transactionUpdate = (event) => {
-  clients.forEach((client) => {
-    client.write(`data: ${JSON.stringify(event)}\n\n`);
-  });
-  console.log(event.message);
-};
+// Route setup
+app.use("/api/sse", transactionDataSSE);
+app.use("/api", transactionDataREST);
 
-(() => {
-  async function runCheckAndUpdate() {
-    async function scheduleNextRun() {
-      await checkAndUpdateLatestTransactionData(transactionUpdate);
-      setTimeout(scheduleNextRun, SCRAPPER_FREQUENCY * 1000 * 60);
-    }
+/**
+ * Gets current timestamp in HH:mm:ss format
+ * @returns {string} Formatted timestamp
+ */
+function getTimestamp() {
+  return chalk.gray(`[${new Date().toLocaleTimeString()}]`);
+}
 
-    await checkAndUpdateLatestTransactionData(transactionUpdate);
-    setTimeout(scheduleNextRun, SCRAPPER_FREQUENCY * 1000 * 60);
+/**
+ * Calculate time difference in seconds with 2 decimal places
+ * @param {Date} startTime 
+ * @returns {string}
+ */
+function getProcessingTime(startTime) {
+  const diff = (Date.now() - startTime) / 1000;
+  return chalk.yellow(`[${diff.toFixed(2)}s]`);
+}
+
+/**
+ * Starts the filing monitoring process.
+ * Periodically checks for new filings and notifies clients.
+ * 
+ * @async
+ * @returns {Promise<void>}
+ */
+async function startFilingMonitoring() {
+  console.log(chalk.bold.cyan("\n=== Starting Filing Monitor ===\n"));
+  
+  try {
+    const startTime = Date.now();
+    await checkAndUpdateLatestTransactionData((update) => {
+      if (update.status === "alert") {
+        console.log(`${getTimestamp()} ${getProcessingTime(startTime)} ${chalk.green("🔔 New filing detected, notifying clients\n")}`);
+        sendSSEUpdate(update);
+      } else if (update.status === "error") {
+        console.error(`${getTimestamp()} ${getProcessingTime(startTime)} ${chalk.red("❌ Filing processing error:")}`);
+        console.error(chalk.red(`  • ${update.message}\n`));
+        sendSSEUpdate(update);
+      }
+    });
+  } catch (error) {
+    console.error(`${getTimestamp()} ${chalk.red("❌ Monitor Error:")}`);
+    console.error(chalk.red(`  • ${error.message}\n`));
   }
 
-  runCheckAndUpdate();
-})();
+  // Schedule next check
+  setTimeout(startFilingMonitoring, CONFIG.checkInterval || 60000);
+}
 
-// SSE endpoint
-app.get("/polititians-transaction-data-sse", transactionDataSSE);
-
-// REST endpoint
-app.get("/latest-polititian-transaction-data", transactionDataREST);
-
-app.listen(PORT, () => {
-  console.log(
-    `SSE endpoint: ${SERVER_NAME}:${PORT}/polititians-transaction-data-sse`
-  );
+// Start the server
+const port = CONFIG.port || 3000;
+app.listen(port, () => {
+  console.log(chalk.bold.cyan("\n=== Politician Stock Filing Tracker ===\n"));
+  console.log(`${getTimestamp()} ${chalk.blue(`🚀 Server running on port ${chalk.white(port)}`)}`);
+  console.log(`${getTimestamp()} ${chalk.blue(`📡 SSE URL: ${chalk.white(`http://localhost:${port}/api/sse`)}`)}`);
+  console.log(chalk.blue("\n📡 Starting filing monitoring...\n"));
+  
+  // Start monitoring after server is running
+  startFilingMonitoring().catch(error => {
+    console.error(`${getTimestamp()} ${chalk.red("❌ Failed to start filing monitoring:")}`);
+    console.error(chalk.red(`  • ${error.message}\n`));
+    process.exit(1);
+  });
 });

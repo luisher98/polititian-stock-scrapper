@@ -58,8 +58,14 @@ export default async function convertPDFToJSON(filePath) {
     // Get the JSON data from the messages
     let data = await messages.data[0].content[0].text.value;
 
-    // Delete the file from OpenAI. this should be done asynchronously to save time
-    await openai.files.del(file.id);
+    // Delete the file from OpenAI asynchronously without blocking
+    (async () => {
+      try {
+        await openai.files.del(file.id);
+      } catch (error) {
+        console.error("Error deleting file:", error);
+      }
+    })().catch(console.error);
 
     // Check if the data prompted by openai is in a JSON format
 
